@@ -54,18 +54,6 @@ JSON 必须包含：`text`, `topics`, `key_facts`, `sentiment`。
 
 ---
 
-## 🌟 配套工具：LivingMemory Composer
-
-写 JSON 太麻烦？不想容易出错？
-我们在根目录下提供了一个绝美的本地 HTML 工具：`lmput_composer.html`
-双击在浏览器中打开，你就能在一个黑曜石玻璃质感的视觉界面中：
-- 分块填写原文、事实、主题
-- 一键点选情感极性
-- 拖动滑块调整重要性
-- **一键生成并复制完整的 `/lmput` 命令**
-
----
-
 ## 安装与更新
 
 1. 将 `livingmemory_manual` 文件夹放入 AstrBot 的 `data/plugins/` 目录中。
