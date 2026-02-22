@@ -418,6 +418,134 @@ class LivingMemoryManual(Star):
             return None
 
     # -----------------------------------------------------------------------
+    # 命令: /lmput（手动指定全部 metadata，不调用 LLM）
+    # -----------------------------------------------------------------------
+
+    @filter.command("lmput")
+    async def lmput_cmd(self, event: AstrMessageEvent, text: str):
+        """直接向 LivingMemory 的记忆库中插入一条带完整 metadata 的记忆。
+
+        不调用 LLM，所有字段由用户手动指定。
+
+        使用示例:
+        /lmput <{"text": "记忆内容", "topics": ["主题"], "key_facts": ["事实"], "sentiment": "positive"}>
+        """
+        raw_text = event.message_str if hasattr(event, "message_str") else ""
+
+        match = re.search(r"<(.+?)>", raw_text, re.DOTALL)
+
+        if not match:
+            yield event.plain_result(
+                "用法: /lmput <JSON>\n"
+                "JSON 必须包含: text, topics, key_facts, sentiment\n"
+                "可选字段: canonical_summary, persona_summary\n\n"
+                "示例:\n"
+                '/lmput <{"text": "Felis Abyssalis养了一只叫诺瓦（Noir）的赛博小猫", '
+                '"topics": ["赛博小猫", "宠物"], '
+                '"key_facts": ["Felis Abyssalis养了一只赛博小猫", "Felis Abyssalis的赛博小猫叫诺瓦（Noir）"], '
+                '"sentiment": "neutral"}>'
+            )
+            return
+
+        json_str = match.group(1).strip()
+
+        # --- 解析 JSON ---
+        try:
+            data = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            yield event.plain_result(f"JSON 解析失败: {e}")
+            return
+
+        # --- 校验必填字段 ---
+        missing = []
+        for field in ("text", "topics", "key_facts", "sentiment"):
+            if field not in data:
+                missing.append(field)
+        if missing:
+            yield event.plain_result(
+                f"缺少必填字段: {', '.join(missing)}\n"
+                "必须包含: text, topics, key_facts, sentiment"
+            )
+            return
+
+        memory_text = data["text"]
+        if not memory_text or not str(memory_text).strip():
+            yield event.plain_result("text 不能为空")
+            return
+
+        memory_text = str(memory_text).strip()
+
+        # 校验类型
+        if not isinstance(data["topics"], list):
+            yield event.plain_result("topics 必须是一个数组，例如: [\"主题1\", \"主题2\"]")
+            return
+        if not isinstance(data["key_facts"], list):
+            yield event.plain_result("key_facts 必须是一个数组，例如: [\"事实1\", \"事实2\"]")
+            return
+        if data["sentiment"] not in ("positive", "negative", "neutral"):
+            yield event.plain_result(
+                "sentiment 必须是 positive / negative / neutral 之一"
+            )
+            return
+
+        # --- 获取会话信息 ---
+        session_id = event.unified_msg_origin
+        if not session_id:
+            yield event.plain_result("无法获取当前会话 ID，请稍后重试")
+            return
+
+        persona_id = await self._get_persona_id(event)
+
+        yield event.plain_result("正在插入记忆...")
+
+        # --- 构建 metadata ---
+        rich_metadata = {
+            "topics": data["topics"],
+            "key_facts": data["key_facts"],
+            "sentiment": data["sentiment"],
+            "interaction_type": "manual_insert",
+            "canonical_summary": data.get("canonical_summary", memory_text),
+            "persona_summary": data.get("persona_summary", memory_text),
+            "summary_schema_version": "v2",
+            "summary_quality": "normal",
+        }
+
+        # --- 获取 MemoryEngine 并写入 ---
+        memory_engine = self._discover_memory_engine()
+        if memory_engine is None:
+            yield event.plain_result(
+                "无法获取 LivingMemory 的 MemoryEngine。"
+                "请确保 LivingMemory 插件已安装、已启用，且初始化完成"
+            )
+            return
+
+        importance = self._default_importance
+
+        try:
+            doc_id = await memory_engine.add_memory(
+                content=memory_text,
+                session_id=session_id,
+                persona_id=persona_id,
+                importance=importance,
+                metadata=rich_metadata,
+            )
+
+            topics_str = ", ".join(data["topics"])
+            yield event.plain_result(
+                f"记忆插入成功\n"
+                f"ID: {doc_id}\n"
+                f"重要性: {importance}\n"
+                f"主题: {topics_str}\n"
+                f"情感: {data['sentiment']}\n"
+                f"内容: {memory_text[:100]}{'...' if len(memory_text) > 100 else ''}"
+            )
+        except Exception as e:
+            logger.error(
+                f"LivingMemoryManual /lmput 插入失败: {e}", exc_info=True
+            )
+            yield event.plain_result(f"记忆插入失败: {e}")
+
+    # -----------------------------------------------------------------------
     # 生命周期
     # -----------------------------------------------------------------------
 
