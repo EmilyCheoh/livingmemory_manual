@@ -144,6 +144,75 @@ class LivingMemoryManual(Star):
         self._memory_engine = memory_engine
         return memory_engine
 
+    async def _ensure_db_connection(self, memory_engine: Any) -> bool:
+        """
+        确保 MemoryEngine 内部的 FAISS DocumentStorage 数据库连接已初始化。
+
+        当 LivingMemory 的初始化顺序异常，或 SQLite 连接在运行时被释放
+        （如热重载、错误恢复等），DocumentStorage.engine 可能为 None。
+        此方法会探测并重新初始化连接，避免 AssertionError。
+
+        探测路径：
+            memory_engine.hybrid_retriever.vector_retriever.faiss_db.document_storage
+        """
+        try:
+            hybrid = getattr(memory_engine, "hybrid_retriever", None)
+            if hybrid is None:
+                logger.debug(
+                    "LivingMemoryManual: 无法探测 hybrid_retriever，跳过连接检查"
+                )
+                return True  # 无法探测，放行让上层自然报错
+
+            vec_ret = getattr(hybrid, "vector_retriever", None)
+            if vec_ret is None:
+                logger.debug(
+                    "LivingMemoryManual: 无法探测 vector_retriever，跳过连接检查"
+                )
+                return True
+
+            faiss_db = getattr(vec_ret, "faiss_db", None)
+            if faiss_db is None:
+                logger.debug(
+                    "LivingMemoryManual: 无法探测 faiss_db，跳过连接检查"
+                )
+                return True
+
+            doc_storage = getattr(faiss_db, "document_storage", None)
+            if doc_storage is None:
+                logger.debug(
+                    "LivingMemoryManual: 无法探测 document_storage，跳过连接检查"
+                )
+                return True
+
+            engine = getattr(doc_storage, "engine", None)
+            if engine is None:
+                logger.warning(
+                    "LivingMemoryManual: 检测到 DocumentStorage.engine 为 None，"
+                    "尝试重新初始化数据库连接..."
+                )
+                await doc_storage.initialize()
+                if doc_storage.engine is not None:
+                    logger.info(
+                        "LivingMemoryManual: DocumentStorage 数据库连接已重新初始化"
+                    )
+                    return True
+                else:
+                    logger.error(
+                        "LivingMemoryManual: DocumentStorage 重新初始化失败，"
+                        "engine 仍然为 None。清除缓存以便下次重新发现"
+                    )
+                    self._memory_engine = None
+                    return False
+
+            return True
+
+        except Exception as e:
+            logger.warning(
+                f"LivingMemoryManual: 数据库连接检查出错: {e}，"
+                "将继续尝试写入"
+            )
+            return True  # 检查出错时放行，让上层捕获实际错误
+
     # -----------------------------------------------------------------------
     # LLM 分析: 提取 topics / key_facts / sentiment
     # -----------------------------------------------------------------------
@@ -311,6 +380,17 @@ class LivingMemoryManual(Star):
             "summary_schema_version": "v2",
             "summary_quality": "normal",
         }
+
+        # --- 确保底层数据库连接可用 ---
+        db_ok = await self._ensure_db_connection(memory_engine)
+        if not db_ok:
+            return {
+                "success": False,
+                "message": (
+                    "FAISS DocumentStorage 数据库连接无法初始化。"
+                    "请尝试重启 AstrBot 或检查 LivingMemory 的日志"
+                ),
+            }
 
         # --- 调用 MemoryEngine.add_memory() ---
         try:
@@ -554,6 +634,15 @@ class LivingMemoryManual(Star):
 
         importance = float(data.get("importance", self._default_importance))
         importance = max(0.0, min(1.0, importance))
+
+        # --- 确保底层数据库连接可用 ---
+        db_ok = await self._ensure_db_connection(memory_engine)
+        if not db_ok:
+            yield event.plain_result(
+                "FAISS DocumentStorage 数据库连接无法初始化。"
+                "请尝试重启 AstrBot 或检查 LivingMemory 的日志"
+            )
+            return
 
         try:
             doc_id = await memory_engine.add_memory(
