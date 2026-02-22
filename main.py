@@ -294,12 +294,19 @@ class LivingMemoryManual(Star):
         # --- 使用 LLM 分析文本，生成与 LivingMemory 自动总结一致的 metadata ---
         analyzed = await self._analyze_with_llm(text)
 
+        key_facts = analyzed.get("key_facts", [text])
+        # canonical_summary 对齐原版格式: summary | fact1；fact2；...
+        canonical_parts = [text]
+        if key_facts:
+            canonical_parts.append("；".join(str(f) for f in key_facts[:5]))
+        canonical_summary = " | ".join(canonical_parts)
+
         rich_metadata = {
             "topics": analyzed.get("topics", [text[:50]]),
-            "key_facts": analyzed.get("key_facts", [text]),
+            "key_facts": key_facts,
             "sentiment": analyzed.get("sentiment", "neutral"),
             "interaction_type": "manual_insert",
-            "canonical_summary": text,
+            "canonical_summary": canonical_summary,
             "persona_summary": text,
             "summary_schema_version": "v2",
             "summary_quality": "normal",
@@ -499,12 +506,23 @@ class LivingMemoryManual(Star):
         yield event.plain_result("正在插入记忆...")
 
         # --- 构建 metadata ---
+        # canonical_summary 对齐原版格式: text | fact1；fact2；...
+        if "canonical_summary" not in data:
+            canonical_parts = [memory_text]
+            if data["key_facts"]:
+                canonical_parts.append(
+                    "；".join(str(f) for f in data["key_facts"][:5])
+                )
+            auto_canonical = " | ".join(canonical_parts)
+        else:
+            auto_canonical = data["canonical_summary"]
+
         rich_metadata = {
             "topics": data["topics"],
             "key_facts": data["key_facts"],
             "sentiment": data["sentiment"],
             "interaction_type": "manual_insert",
-            "canonical_summary": data.get("canonical_summary", memory_text),
+            "canonical_summary": auto_canonical,
             "persona_summary": data.get("persona_summary", memory_text),
             "summary_schema_version": "v2",
             "summary_quality": "normal",
