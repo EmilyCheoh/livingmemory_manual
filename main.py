@@ -69,57 +69,40 @@ class LivingMemoryManual(Star):
         在运行时遍历已加载的 Star 插件，找到 LivingMemory 实例，
         获取其 MemoryEngine。
 
+        使用 AstrBot v4.15.0 的 Context API:
+            context.get_registered_star(name) -> StarMetadata
+            context.get_all_stars() -> list[StarMetadata]
+
         LivingMemory 的实例结构:
-            plugin.initializer.memory_engine  -> MemoryEngine 实例
+            star_metadata.star_cls.initializer.memory_engine -> MemoryEngine
         """
         if self._memory_engine is not None:
             return self._memory_engine
 
         try:
-            # AstrBot 的 context 中保存了所有已加载的 Star 插件实例
-            star_manager = getattr(self.context, "star_manager", None)
-            if not star_manager:
-                logger.warning("LivingMemoryManual: 无法获取 star_manager")
+            # 方法 1: 直接按注册名查找 LivingMemory
+            star_meta = self.context.get_registered_star("LivingMemory")
+            if star_meta is not None:
+                star_obj = getattr(star_meta, "star_cls", None)
+                if star_obj is not None:
+                    return self._extract_engine(star_obj)
+
+            # 方法 2: 遍历所有已注册的插件，按类名匹配
+            all_stars = self.context.get_all_stars()
+            if not all_stars:
+                logger.warning(
+                    "LivingMemoryManual: 已注册插件列表为空"
+                )
                 return None
 
-            # 遍历已注册的 Star 实例
-            star_insts = getattr(star_manager, "star_insts", None)
-            if not star_insts:
-                logger.warning("LivingMemoryManual: 无法获取 star_insts")
-                return None
-
-            for star_inst in star_insts:
-                # star_inst 可能是 StarMetadata 容器，获取实际的 Star 对象
-                star_obj = getattr(star_inst, "star_cls", None)
+            for star_meta in all_stars:
+                star_obj = getattr(star_meta, "star_cls", None)
                 if star_obj is None:
-                    star_obj = star_inst
+                    continue
 
-                # 检查类名是否为 LivingMemoryPlugin
                 class_name = type(star_obj).__name__
                 if class_name == "LivingMemoryPlugin":
-                    # 从 LivingMemory 实例中获取 MemoryEngine
-                    initializer = getattr(star_obj, "initializer", None)
-                    if initializer is None:
-                        logger.warning(
-                            "LivingMemoryManual: 找到 LivingMemoryPlugin 但 "
-                            "initializer 为 None"
-                        )
-                        return None
-
-                    memory_engine = getattr(initializer, "memory_engine", None)
-                    if memory_engine is None:
-                        logger.warning(
-                            "LivingMemoryManual: 找到 LivingMemoryPlugin 但 "
-                            "memory_engine 尚未初始化"
-                        )
-                        return None
-
-                    logger.info(
-                        "LivingMemoryManual: 成功获取 LivingMemory 的 "
-                        "MemoryEngine 实例"
-                    )
-                    self._memory_engine = memory_engine
-                    return memory_engine
+                    return self._extract_engine(star_obj)
 
             logger.warning(
                 "LivingMemoryManual: 未找到 LivingMemoryPlugin 实例。"
@@ -133,6 +116,31 @@ class LivingMemoryManual(Star):
                 exc_info=True,
             )
             return None
+
+    def _extract_engine(self, star_obj: Any) -> Any | None:
+        """从 LivingMemoryPlugin 实例中提取 MemoryEngine。"""
+        initializer = getattr(star_obj, "initializer", None)
+        if initializer is None:
+            logger.warning(
+                "LivingMemoryManual: 找到 LivingMemoryPlugin 但 "
+                "initializer 为 None"
+            )
+            return None
+
+        memory_engine = getattr(initializer, "memory_engine", None)
+        if memory_engine is None:
+            logger.warning(
+                "LivingMemoryManual: 找到 LivingMemoryPlugin 但 "
+                "memory_engine 尚未初始化"
+            )
+            return None
+
+        logger.info(
+            "LivingMemoryManual: 成功获取 LivingMemory 的 "
+            "MemoryEngine 实例"
+        )
+        self._memory_engine = memory_engine
+        return memory_engine
 
     # -----------------------------------------------------------------------
     # 核心功能: insert_memory
