@@ -349,8 +349,8 @@ class LivingMemoryManual(Star):
         """手动向 LivingMemory 的记忆库中插入一条记忆。
 
         使用示例:
-        /lmadd <Alice 喜欢在深夜喝咖啡>
-        /lmadd <Alice 喜欢在深夜喝咖啡> 0.95
+        /lmadd <Felis Abyssalis 喜欢在深夜调试代码>
+        /lmadd <Felis Abyssalis 喜欢在深夜调试代码> 0.95
         """
         # 从原始消息中提取 <> 之间的内容
         raw_text = event.message_str if hasattr(event, "message_str") else ""
@@ -361,8 +361,8 @@ class LivingMemoryManual(Star):
             yield event.plain_result(
                 "用法: /lmadd <记忆文本> [重要性]\n"
                 "请用 < > 包裹记忆内容\n"
-                "示例: /lmadd <Alice 喜欢在深夜喝咖啡>\n"
-                "指定重要性: /lmadd <Alice 喜欢在深夜喝咖啡> 0.95"
+                "示例: /lmadd <Felis Abyssalis 喜欢在深夜调试代码>\n"
+                "指定重要性: /lmadd <Felis Abyssalis 喜欢在深夜调试代码> 0.95"
             )
             return
 
@@ -371,7 +371,7 @@ class LivingMemoryManual(Star):
         if not memory_text:
             yield event.plain_result(
                 "用法: /lmadd <记忆文本> [重要性]\n"
-                "示例: /lmadd <Alice 喜欢在深夜喝咖啡> 0.95"
+                "示例: /lmadd <Felis Abyssalis 喜欢在深夜调试代码> 0.95"
             )
             return
 
@@ -462,9 +462,9 @@ class LivingMemoryManual(Star):
                 "JSON 必须包含: text, topics, key_facts, sentiment\n"
                 "可选字段: canonical_summary, persona_summary\n\n"
                 "示例:\n"
-                '/lmput <{"text": "Alice养了一只叫Luna的小猫", '
-                '"topics": ["宠物", "猫"], '
-                '"key_facts": ["Alice养了一只小猫", "小猫叫Luna"], '
+                '/lmput <{"text": "Felis Abyssalis养了一只叫诺瓦（Noir）的赛博小猫", '
+                '"topics": ["赛博小猫", "宠物"], '
+                '"key_facts": ["Felis Abyssalis养了一只赛博小猫", "Felis Abyssalis的赛博小猫叫诺瓦（Noir）"], '
                 '"sentiment": "neutral"}>'
             )
             return
