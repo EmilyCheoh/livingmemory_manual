@@ -1,5 +1,5 @@
 name: livingmemory_manual
 description: LivingMemory 手动记忆注入插件 - 向 LivingMemory 的记忆库手动插入记忆条目
-version: 1.0.0
+version: 1.0.2
 author: Felis Abyssalis
 repo: https://github.com/EmilyCheoh/livingmemory_manual

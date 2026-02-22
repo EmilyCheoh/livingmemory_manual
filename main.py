@@ -30,7 +30,7 @@ DEFAULT_IMPORTANCE = 0.8  # 手动插入的记忆默认重要性（高于自动�
     "LivingMemoryManual",
     "FelisAbyssalis",
     "LivingMemory 手动记忆注入插件 - 向 LivingMemory 的记忆库手动插入记忆条目",
-    "1.0.0",
+    "1.0.2",
     "",
 )
 class LivingMemoryManual(Star):

@@ -2,6 +2,11 @@
 
 All notable changes to `livingmemory_manual` will be documented in this file.
 
+## [1.0.2] - 2026-02-23
+
+### Fixed
+- **FAISS Database Connection Loss (`AssertionError`)**: Added a defensive `_ensure_db_connection()` routine that probes into the `MemoryEngine` internals prior to inserting memories. If the underlying `FaissVecDB`'s SQLite `DocumentStorage.engine` is unexpectedly `None` (e.g., due to background cleanup, connection dropping, or hot reloading), it will silently reinitialize the connection automatically. This prevents the `Database connection is not initialized` crash and ensures uninterrupted memory saving.
+
 ## [1.0.1] - 2026-02-22
 
 ### Added
