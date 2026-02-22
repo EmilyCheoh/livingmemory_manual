@@ -348,7 +348,9 @@ class LivingMemoryManual(Star):
     async def lmadd_cmd(self, event: AstrMessageEvent, text: str):
         """手动向 LivingMemory 的记忆库中插入一条记忆。
 
-        使用示例: /lmadd <Felis Abyssalis 喜欢在深夜调试代码>
+        使用示例:
+        /lmadd <Felis Abyssalis 喜欢在深夜调试代码>
+        /lmadd <Felis Abyssalis 喜欢在深夜调试代码> 0.95
         """
         # 从原始消息中提取 <> 之间的内容
         raw_text = event.message_str if hasattr(event, "message_str") else ""
@@ -357,9 +359,10 @@ class LivingMemoryManual(Star):
 
         if not match:
             yield event.plain_result(
-                "用法: /lmadd <记忆文本>\n"
+                "用法: /lmadd <记忆文本> [重要性]\n"
                 "请用 < > 包裹记忆内容\n"
-                "示例: /lmadd <Felis Abyssalis 喜欢在深夜调试代码>"
+                "示例: /lmadd <Felis Abyssalis 喜欢在深夜调试代码>\n"
+                "指定重要性: /lmadd <Felis Abyssalis 喜欢在深夜调试代码> 0.95"
             )
             return
 
@@ -367,10 +370,20 @@ class LivingMemoryManual(Star):
 
         if not memory_text:
             yield event.plain_result(
-                "用法: /lmadd <记忆文本>\n"
-                "示例: /lmadd <Felis Abyssalis 喜欢在深夜调试代码>"
+                "用法: /lmadd <记忆文本> [重要性]\n"
+                "示例: /lmadd <Felis Abyssalis 喜欢在深夜调试代码> 0.95"
             )
             return
+
+        # 解析可选的重要性参数（在 > 之后）
+        importance = None
+        after_bracket = raw_text[match.end():].strip()
+        if after_bracket:
+            try:
+                importance = float(after_bracket)
+                importance = max(0.0, min(1.0, importance))
+            except ValueError:
+                pass  # 忽略无法解析的部分，使用默认值
 
         # 获取当前会话 ID
         session_id = event.unified_msg_origin
@@ -387,14 +400,16 @@ class LivingMemoryManual(Star):
             text=memory_text,
             session_id=session_id,
             persona_id=persona_id,
+            importance=importance,
         )
 
         if result["success"]:
             memory_id = result.get("memory_id", "N/A")
+            used_importance = importance if importance is not None else self._default_importance
             yield event.plain_result(
                 f"记忆插入成功\n"
                 f"ID: {memory_id}\n"
-                f"重要性: {self._default_importance}\n"
+                f"重要性: {used_importance}\n"
                 f"内容: {memory_text[:100]}{'...' if len(memory_text) > 100 else ''}"
             )
         else:
@@ -537,7 +552,8 @@ class LivingMemoryManual(Star):
             )
             return
 
-        importance = self._default_importance
+        importance = float(data.get("importance", self._default_importance))
+        importance = max(0.0, min(1.0, importance))
 
         try:
             doc_id = await memory_engine.add_memory(
