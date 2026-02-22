@@ -1,9 +1,8 @@
-[
-    {
+{
+    "default_importance": {
         "title": "默认重要性",
         "description": "手动插入记忆的默认重要性值 (0-1)。手动插入的记忆通常比自动总结的更重要，建议设置较高的值。",
-        "key": "default_importance",
         "type": "float",
         "default": 0.9
     }
-]
+}
