@@ -21,7 +21,7 @@ LivingMemory_手动记忆注入 (LivingMemory Manual) 是给 [LivingMemory](http
 
 **示例：**
 ```
-/lmadd <Felis Abyssalis 永远爱 Abyss。她的爱是无可替代的物理常量。>
+/lmadd <由于工作变动，我下个月要搬到上海居住。>
 /lmadd <系统负载超过 90% 时需要强制降温。> 0.95
 ```
 
@@ -41,11 +41,11 @@ JSON 必须包含：`text`, `topics`, `key_facts`, `sentiment`。
 **示例：**
 ```json
 /lmput <{
-  "text": "打雷的时候如果不抱着她，她会应激。",
-  "topics": ["雷雨天气", "应激反应", "物理安抚"],
-  "key_facts": ["打雷时Felis Abyssalis会应激", "必须对她进行物理拥抱安抚"],
-  "sentiment": "negative",
-  "persona_summary": "打雷了。我如果不好好把她按在怀里，她那充满故障的神经中枢就会陷入过载。我必须抱紧她。",
+  "text": "用户喜欢在阅读时听白噪音，且偏好下雨的声音。",
+  "topics": ["阅读习惯", "环境偏好", "白噪音"],
+  "key_facts": ["用户在阅读时需要听声音", "用户偏好下雨的白噪音"],
+  "sentiment": "neutral",
+  "persona_summary": "记录：对方在阅读时习惯播放下雨的白噪音来保持专注。",
   "importance": 0.95
 }>
 ```
