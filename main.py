@@ -10,12 +10,14 @@ MemoryEngine.add_memory() 内部自动处理 BM25、Faiss、SQLite 三路写入�
 F(A) = A(F)
 """
 
+import json
 import re
 from typing import Any
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
+from astrbot.core.provider.entities import ProviderType
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +145,97 @@ class LivingMemoryManual(Star):
         return memory_engine
 
     # -----------------------------------------------------------------------
+    # LLM 分析: 提取 topics / key_facts / sentiment
+    # -----------------------------------------------------------------------
+
+    _ANALYSIS_SYSTEM_PROMPT = (
+        "你是一个记忆分析引擎。给定一段手动写入的记忆文本，"
+        "请提取结构化信息并以 JSON 格式返回。"
+        "只输出 JSON，不要任何额外文字。"
+    )
+
+    _ANALYSIS_USER_PROMPT = (
+        "请分析以下记忆文本，提取结构化信息。\n\n"
+        "记忆文本：\n{text}\n\n"
+        "请用以下 JSON 格式返回：\n"
+        '{{\n'
+        '  "topics": ["主题1", "主题2"],\n'
+        '  "key_facts": ["关键事实1", "关键事实2"],\n'
+        '  "sentiment": "positive 或 negative 或 neutral"\n'
+        '}}\n\n'
+        "要求：\n"
+        "- topics: 2-4 个简短的主题短语，概括记忆的核心内容\n"
+        "- key_facts: 从文本中提取的独立事实陈述，每条一个要点\n"
+        "- sentiment: 整体情感倾向，只能是 positive / negative / neutral 之一\n"
+        "- 只输出 JSON，不要 markdown 代码块，不要任何解释"
+    )
+
+    async def _analyze_with_llm(self, text: str) -> dict:
+        """
+        调用 AstrBot 的 LLM Provider 分析记忆文本，
+        提取 topics、key_facts、sentiment。
+
+        如果 LLM 调用失败或解析失败，返回合理的默认值。
+        """
+        try:
+            provider = self.context.provider_manager.get_using_provider(
+                ProviderType.CHAT_COMPLETION
+            )
+            if provider is None:
+                logger.warning(
+                    "LivingMemoryManual: 没有可用的 LLM Provider，"
+                    "跳过元数据分析"
+                )
+                return {}
+
+            response = await provider.text_chat(
+                prompt=self._ANALYSIS_USER_PROMPT.format(text=text),
+                system_prompt=self._ANALYSIS_SYSTEM_PROMPT,
+            )
+
+            result_text = response.completion_text
+            if not result_text:
+                return {}
+
+            # 清理可能的 markdown 代码块包裹
+            result_text = result_text.strip()
+            if result_text.startswith("```"):
+                result_text = re.sub(
+                    r"^```(?:json)?\s*", "", result_text
+                )
+                result_text = re.sub(r"\s*```$", "", result_text)
+
+            parsed = json.loads(result_text)
+
+            # 校验字段类型
+            if not isinstance(parsed.get("topics"), list):
+                parsed["topics"] = [text[:50]]
+            if not isinstance(parsed.get("key_facts"), list):
+                parsed["key_facts"] = [text]
+            if parsed.get("sentiment") not in (
+                "positive", "negative", "neutral"
+            ):
+                parsed["sentiment"] = "neutral"
+
+            logger.info(
+                f"LivingMemoryManual: LLM 分析完成 - "
+                f"topics={parsed['topics']}, "
+                f"sentiment={parsed['sentiment']}"
+            )
+            return parsed
+
+        except json.JSONDecodeError as e:
+            logger.warning(
+                f"LivingMemoryManual: LLM 返回内容解析失败: {e}"
+            )
+            return {}
+        except Exception as e:
+            logger.warning(
+                f"LivingMemoryManual: LLM 分析失败，使用默认值: {e}"
+            )
+            return {}
+
+    # -----------------------------------------------------------------------
     # 核心功能: insert_memory
     # -----------------------------------------------------------------------
 
@@ -198,19 +291,18 @@ class LivingMemoryManual(Star):
 
         importance = max(0.0, min(1.0, importance))
 
-        # --- 构建与 LivingMemory 自动总结一致的 metadata ---
-        # LivingMemory 的 add_memory() 接受 metadata 字典，会与基础元数据合并。
-        # 自动总结管线在 metadata 中填充 topics, key_facts, sentiment 等字段。
-        # 手动插入时我们构建等价结构，使记忆在数据库中格式一致。
+        # --- 使用 LLM 分析文本，生成与 LivingMemory 自动总结一致的 metadata ---
+        analyzed = await self._analyze_with_llm(text)
+
         rich_metadata = {
-            "topics": [text[:50] + ("..." if len(text) > 50 else "")],
-            "key_facts": [text],
-            "sentiment": "neutral",
+            "topics": analyzed.get("topics", [text[:50]]),
+            "key_facts": analyzed.get("key_facts", [text]),
+            "sentiment": analyzed.get("sentiment", "neutral"),
             "interaction_type": "manual_insert",
             "canonical_summary": text,
             "persona_summary": text,
             "summary_schema_version": "v2",
-            "summary_quality": "manual",
+            "summary_quality": "normal",
         }
 
         # --- 调用 MemoryEngine.add_memory() ---
