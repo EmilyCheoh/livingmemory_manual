@@ -198,6 +198,21 @@ class LivingMemoryManual(Star):
 
         importance = max(0.0, min(1.0, importance))
 
+        # --- 构建与 LivingMemory 自动总结一致的 metadata ---
+        # LivingMemory 的 add_memory() 接受 metadata 字典，会与基础元数据合并。
+        # 自动总结管线在 metadata 中填充 topics, key_facts, sentiment 等字段。
+        # 手动插入时我们构建等价结构，使记忆在数据库中格式一致。
+        rich_metadata = {
+            "topics": [text[:50] + ("..." if len(text) > 50 else "")],
+            "key_facts": [text],
+            "sentiment": "neutral",
+            "interaction_type": "manual_insert",
+            "canonical_summary": text,
+            "persona_summary": text,
+            "summary_schema_version": "v2",
+            "summary_quality": "manual",
+        }
+
         # --- 调用 MemoryEngine.add_memory() ---
         try:
             doc_id = await memory_engine.add_memory(
@@ -205,6 +220,7 @@ class LivingMemoryManual(Star):
                 session_id=session_id,
                 persona_id=persona_id,
                 importance=importance,
+                metadata=rich_metadata,
             )
 
             logger.info(
