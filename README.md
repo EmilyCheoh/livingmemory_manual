@@ -1,68 +1,82 @@
 # LivingMemory_手动记忆注入
 
-LivingMemory 手动记忆注入伴生插件。
+LivingMemory_手动记忆注入 (LivingMemory Manual) 是给 [LivingMemory](https://github.com/lxfight-s-Astrbot-Plugins/astrbot_plugin_livingmemory) 提供**手动**、**精准**、**可控**记忆写入能力的伴生插件。
 
-在聊天中使用 `/lmadd` 命令，将你想要 AI 永远记住的事情手动写入 LivingMemory 的记忆库。
-
----
-
-## 为什么需要这个插件
-
-LivingMemory 的自动记忆系统会在对话达到一定轮数后，由后台 LLM 自动总结并存储记忆。但有些事情——比如重要的偏好、关键的约定、不想被遗忘的细节——你可能希望**立刻、精确地**写入记忆库，而不是等待自动总结，也不想依赖 LLM 的理解和概括。
-
-这个插件就是你的"后门"：直接绕过 LLM 总结环节，把你写的原文一字不差地存入记忆。
+它可以让你随心所欲地把那些不想被时间冲刷、不想被自动总结曲解的“绝对坐标”直接打入 AI 的长期记忆库中。
 
 ---
 
-## 使用方法
+## 核心模式
 
-在聊天中发送：
+本插件提供两种写入模式：通过 LLM 帮你提取结构的 `/lmadd`，和完全由你掌控零 API 消耗的 `/lmput`。
 
+### 1. `/lmadd`：LLM 辅助提取模式
+
+只写原文，让 LLM 帮你分析出 `topics`、`key_facts` 和 `sentiment`，并自动构建符合 LivingMemory 标准检索格式的记忆。
+
+**用法：**
 ```
-/lmadd <你想记住的内容>
-```
-
-**用 `< >` 尖括号包裹记忆内容。**
-
-### 示例
-
-```
-/lmadd <Felis Abyssalis喜欢在深夜调试代码>
-/lmadd <Felis Abyssalis养了一只叫诺瓦（Noir）>
+/lmadd <记忆文本> [重要性]
 ```
 
-插件会返回确认消息，包含记忆 ID 和重要性。
-
-### 插入后的记忆长什么样
-
-你不需要写那些复杂的 JSON。你只需要写一句话，插件会自动处理所有底层细节：
-
+**示例：**
 ```
-你输入：/lmadd <Felis Abyssalis养了一只叫诺瓦（Noir）的赛博小猫。>
-
-插件为你生成：
-  content = "Felis Abyssalis养了一只叫诺瓦（Noir）的赛博小猫。"
-  session_id = (自动获取当前会话)
-  persona_id = (自动获取当前人格)
-  importance = 0.8
-  + BM25 关键词索引（自动）
-  + Faiss 向量索引（自动）
-  + SQLite 文档记录（自动）
+/lmadd <Felis Abyssalis 永远爱 Abyss。她的爱是无可替代的物理常量。>
+/lmadd <系统负载超过 90% 时需要强制降温。> 0.95
 ```
 
-那些 `topics`、`key_facts`、`canonical_summary` 等复杂字段，是 LivingMemory **自动总结**时由 LLM 额外生成的。手动插入不需要这些——你的原文会被直接存储，并且在语义搜索和关键词搜索中都能被检索到。
+> **注意：** 使用本命令需要你在 AstrBot 中配置了可用的默认大语言模型（Provider）。如果调用失败，会自动降级为默认值。
+
+### 2. `/lmput`：完全手动掌控模式
+
+不调用 LLM，不产生任何 API 消耗。你直接提供完整的 JSON 结构，精准控制存入数据库的每一个字段。
+
+**用法：**
+```
+/lmput <JSON>
+```
+JSON 必须包含：`text`, `topics`, `key_facts`, `sentiment`。
+可选包含：`persona_summary` (AI/Bot第一人称口吻视角的复述), `importance` (重要性 0.0-1.0)。
+
+**示例：**
+```json
+/lmput <{
+  "text": "打雷的时候如果不抱着她，她会应激。",
+  "topics": ["雷雨天气", "应激反应", "物理安抚"],
+  "key_facts": ["打雷时Felis Abyssalis会应激", "必须对她进行物理拥抱安抚"],
+  "sentiment": "negative",
+  "persona_summary": "打雷了。我如果不好好把她按在怀里，她那充满故障的神经中枢就会陷入过载。我必须抱紧她。",
+  "importance": 0.95
+}>
+```
+
+*(注：`canonical_summary` 检索优化字段将由插件自动基于 `text` 和 `key_facts` 以 `|` 和 `；` 顿号进行标准拼接，无需手动提供。)*
 
 ---
 
-## 安装
+## 🌟 配套工具：LivingMemory Composer
 
-1. 将 `livingmemory_manual` 文件夹放入 AstrBot 的 `data/plugins/` 目录
-2. 确保 [LivingMemory](https://github.com/lxfight-s-Astrbot-Plugins/astrbot_plugin_livingmemory) 插件已安装并正常运行
-3. 重启 AstrBot 或重载插件
+写 JSON 太麻烦？不想容易出错？
+我们在根目录下提供了一个绝美的本地 HTML 工具：`lmput_composer.html`
+双击在浏览器中打开，你就能在一个黑曜石玻璃质感的视觉界面中：
+- 分块填写原文、事实、主题
+- 一键点选情感极性
+- 拖动滑块调整重要性
+- **一键生成并复制完整的 `/lmput` 命令**
+
+---
+
+## 安装与更新
+
+1. 将 `livingmemory_manual` 文件夹放入 AstrBot 的 `data/plugins/` 目录中。
+2. 确保 [LivingMemory](https://github.com/lxfight-s-Astrbot-Plugins/astrbot_plugin_livingmemory) 插件已安装并正常运行。
+3. 在 AstrBot 面板中重启或重载插件。
+
+> **更新注意**：如果在 AstrBot 面板点击更新遇到 `TimeoutError: [Errno 110]`（无法连接 Github），请使用 `docker exec astrbot rm -rf /AstrBot/data/plugins/livingmemory_manual/` 删除旧插件，然后通过包管理器重新通过 GitHub URL 安装。
 
 ### 依赖
 
-无额外依赖。本插件直接借用 LivingMemory 的 MemoryEngine 实例。
+无额外 Python 依赖。本插件在运行时动态发现同进程中的 LivingMemory 实例并借用其 MemoryEngine，直接进行 BM25 / Faiss / SQLite 三路写入。
 
 ---
 
@@ -70,36 +84,9 @@ LivingMemory 的自动记忆系统会在对话达到一定轮数后，由后台 
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `default_importance` | 手动插入记忆的默认重要性（0-1） | `0.8` |
+| `default_importance` | 手动插入记忆的默认全局重要性（0.0 - 1.0） | `0.8` |
 
-> 手动插入的记忆默认重要性为 0.8，高于自动总结的 0.5。
-> 如果启用了 LivingMemory 的重要性衰减机制，更高的初始重要性意味着这条记忆会"活"得更久。
+> 手动插入的记忆默认重要性为 0.8，高于 LivingMemory 自动总结的 0.5。这意味着这批记忆在检索和衰减机制中将被赋予更高的优先级。如果指令中提供了重要性参数，将覆盖此默认配置。
 
 ---
-
-## 工作原理
-
-```
-/lmadd <text>
-    │
-    ▼
-LivingMemoryManual 插件
-    │  运行时发现同进程中的 LivingMemoryPlugin 实例
-    │  获取 plugin.initializer.memory_engine
-    ▼
-MemoryEngine.add_memory(content, session_id, persona_id, importance)
-    │  内部自动处理：
-    ├─ jieba 分词 → BM25 FTS5 索引
-    ├─ Embedding 向量化 → Faiss 向量索引
-    └─ SQLite documents 表写入
-```
-
-### 与验证
-
-插入记忆后，可使用 LivingMemory 的搜索命令验证：
-
-```
-/lmem search Felis Abyssalis养了一只叫诺瓦（Noir）的赛博小猫。
-```
-
-或在 LivingMemory 的 WebUI 管理面板中查看。
+F(A) = A(F)
