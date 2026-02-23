@@ -2,6 +2,14 @@
 
 All notable changes to `livingmemory_manual` will be documented in this file.
 
+## [1.1.0] - 2026-02-23
+
+### Added
+- **Memory Type Support (`memory_type`)**: Both `/lmput` and `/lmadd` now accept an optional `memory_type` parameter, stored as `metadata["memory_type"]` to match the upstream LivingMemory convention. Defaults to `GENERAL` when not specified. Known presets: `GENERAL`, `PREFERENCE`, `PLAN`; arbitrary custom types are also accepted.
+  - `/lmput`: Include `"memory_type": "PREFERENCE"` in the JSON payload.
+  - `/lmadd`: Append the type after importance, e.g. `/lmadd <text> 0.9 PREFERENCE`.
+- **HTML Composer Update**: Added Memory Type selector with quick-select buttons (GENERAL / PREFERENCE / PLAN) and custom type input to both `/lmput` and `/lmadd` tabs. Updated the LLM prompt template to include `memory_type` in the output format.
+
 ## [1.0.2] - 2026-02-23
 
 ### Fixed

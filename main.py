@@ -24,13 +24,14 @@ from astrbot.core.provider.entities import ProviderType
 # 常量
 # ---------------------------------------------------------------------------
 DEFAULT_IMPORTANCE = 0.8  # 手动插入的记忆默认重要性（高于自动总结的 0.5）
+DEFAULT_MEMORY_TYPE = "GENERAL"  # 默认记忆类型（与 LivingMemory 一致）
 
 
 @register(
     "LivingMemoryManual",
     "FelisAbyssalis",
     "LivingMemory 手动记忆注入插件 - 向 LivingMemory 的记忆库手动插入记忆条目",
-    "1.0.2",
+    "1.1.0",
     "",
 )
 class LivingMemoryManual(Star):
@@ -314,6 +315,7 @@ class LivingMemoryManual(Star):
         session_id: str,
         persona_id: str | None = None,
         importance: float | None = None,
+        memory_type: str = DEFAULT_MEMORY_TYPE,
     ) -> dict[str, Any]:
         """
         向 LivingMemory 的记忆库中插入一条手动记忆。
@@ -374,6 +376,7 @@ class LivingMemoryManual(Star):
             "topics": analyzed.get("topics", [text[:50]]),
             "key_facts": key_facts,
             "sentiment": analyzed.get("sentiment", "neutral"),
+            "memory_type": memory_type,
             "interaction_type": "private_chat",
             "canonical_summary": canonical_summary,
             "persona_summary": text,
@@ -431,6 +434,7 @@ class LivingMemoryManual(Star):
         使用示例:
         /lmadd <Felis Abyssalis 喜欢在深夜调试代码>
         /lmadd <Felis Abyssalis 喜欢在深夜调试代码> 0.95
+        /lmadd <Felis Abyssalis 喜欢在深夜调试代码> 0.95 PREFERENCE
         """
         # 从原始消息中提取 <> 之间的内容
         raw_text = event.message_str if hasattr(event, "message_str") else ""
@@ -439,10 +443,12 @@ class LivingMemoryManual(Star):
 
         if not match:
             yield event.plain_result(
-                "用法: /lmadd <记忆文本> [重要性]\n"
+                "用法: /lmadd <记忆文本> [重要性] [记忆类型]\n"
                 "请用 < > 包裹记忆内容\n"
                 "示例: /lmadd <Felis Abyssalis 喜欢在深夜调试代码>\n"
-                "指定重要性: /lmadd <Felis Abyssalis 喜欢在深夜调试代码> 0.95"
+                "指定重要性: /lmadd <Felis Abyssalis 喜欢在深夜调试代码> 0.95\n"
+                "指定类型: /lmadd <Felis Abyssalis 喜欢在深夜调试代码> 0.95 PREFERENCE\n"
+                "可用类型: GENERAL（默认）、PREFERENCE、PLAN 或自定义"
             )
             return
 
@@ -450,20 +456,28 @@ class LivingMemoryManual(Star):
 
         if not memory_text:
             yield event.plain_result(
-                "用法: /lmadd <记忆文本> [重要性]\n"
-                "示例: /lmadd <Felis Abyssalis 喜欢在深夜调试代码> 0.95"
+                "用法: /lmadd <记忆文本> [重要性] [记忆类型]\n"
+                "示例: /lmadd <Felis Abyssalis 喜欢在深夜调试代码> 0.95 PREFERENCE"
             )
             return
 
-        # 解析可选的重要性参数（在 > 之后）
+        # 解析可选的重要性和记忆类型参数（在 > 之后）
         importance = None
+        memory_type = DEFAULT_MEMORY_TYPE
         after_bracket = raw_text[match.end():].strip()
         if after_bracket:
-            try:
-                importance = float(after_bracket)
-                importance = max(0.0, min(1.0, importance))
-            except ValueError:
-                pass  # 忽略无法解析的部分，使用默认值
+            parts = after_bracket.split()
+            # 第一个部分尝试解析为重要性（float）
+            if parts:
+                try:
+                    importance = float(parts[0])
+                    importance = max(0.0, min(1.0, importance))
+                except ValueError:
+                    # 不是数字，当作 memory_type
+                    memory_type = parts[0].upper()
+            # 第二个部分作为 memory_type
+            if len(parts) >= 2:
+                memory_type = parts[1].upper()
 
         # 获取当前会话 ID
         session_id = event.unified_msg_origin
@@ -481,6 +495,7 @@ class LivingMemoryManual(Star):
             session_id=session_id,
             persona_id=persona_id,
             importance=importance,
+            memory_type=memory_type,
         )
 
         if result["success"]:
@@ -489,6 +504,7 @@ class LivingMemoryManual(Star):
             yield event.plain_result(
                 f"记忆插入成功\n"
                 f"ID: {memory_id}\n"
+                f"类型: {memory_type}\n"
                 f"重要性: {used_importance}\n"
                 f"内容: {memory_text[:100]}{'...' if len(memory_text) > 100 else ''}"
             )
@@ -540,7 +556,8 @@ class LivingMemoryManual(Star):
             yield event.plain_result(
                 "用法: /lmput <JSON>\n"
                 "JSON 必须包含: text, topics, key_facts, sentiment\n"
-                "可选字段: canonical_summary, persona_summary\n\n"
+                "可选字段: memory_type, canonical_summary, persona_summary\n\n"
+                "memory_type 可用值: GENERAL（默认）、PREFERENCE、PLAN 或自定义\n\n"
                 "示例:\n"
                 '/lmput <{"text": "Felis Abyssalis养了一只叫诺瓦（Noir）的赛博小猫", '
                 '"topics": ["赛博小猫", "宠物"], '
@@ -612,10 +629,13 @@ class LivingMemoryManual(Star):
         else:
             auto_canonical = data["canonical_summary"]
 
+        memory_type = data.get("memory_type", DEFAULT_MEMORY_TYPE).upper()
+
         rich_metadata = {
             "topics": data["topics"],
             "key_facts": data["key_facts"],
             "sentiment": data["sentiment"],
+            "memory_type": memory_type,
             "interaction_type": "private_chat",
             "canonical_summary": auto_canonical,
             "persona_summary": data.get("persona_summary", memory_text),
@@ -657,6 +677,7 @@ class LivingMemoryManual(Star):
             yield event.plain_result(
                 f"记忆插入成功\n"
                 f"ID: {doc_id}\n"
+                f"类型: {memory_type}\n"
                 f"重要性: {importance}\n"
                 f"主题: {topics_str}\n"
                 f"情感: {data['sentiment']}\n"
