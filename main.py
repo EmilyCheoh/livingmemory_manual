@@ -31,7 +31,7 @@ DEFAULT_MEMORY_TYPE = "GENERAL"  # 默认记忆类型（与 LivingMemory 一致�
     "LivingMemoryManual",
     "FelisAbyssalis",
     "LivingMemory 手动记忆注入插件 - 向 LivingMemory 的记忆库手动插入记忆条目",
-    "1.1.0",
+    "1.2.0",
     "",
 )
 class LivingMemoryManual(Star):
@@ -362,26 +362,19 @@ class LivingMemoryManual(Star):
 
         importance = max(0.0, min(1.0, importance))
 
-        # --- 使用 LLM 分析文本，生成与 LivingMemory 自动总结一致的 metadata ---
+        # --- 使用 LLM 分析文本，生成 metadata ---
+        # 注意：canonical_summary 和 persona_summary 在 livingmemory 的检索和注入管线中
+        # 均不被使用（检索只匹配 content，注入只读 topics/key_facts/importance），
+        # 因此不再构建和存储这两个冗余字段。
         analyzed = await self._analyze_with_llm(text)
-
-        key_facts = analyzed.get("key_facts", [text])
-        # canonical_summary 对齐原版格式: summary | fact1；fact2；...
-        canonical_parts = [text]
-        if key_facts:
-            canonical_parts.append("；".join(str(f) for f in key_facts[:5]))
-        canonical_summary = " | ".join(canonical_parts)
 
         rich_metadata = {
             "topics": analyzed.get("topics", [text[:50]]),
-            "key_facts": key_facts,
+            "key_facts": analyzed.get("key_facts", [text]),
             "sentiment": analyzed.get("sentiment", "neutral"),
             "memory_type": memory_type,
             "interaction_type": "private_chat",
-            "canonical_summary": canonical_summary,
-            "persona_summary": text,
-            "summary_schema_version": "v2",
-            "summary_quality": "normal",
+            "summary_schema_version": "v3",
         }
 
         # --- 确保底层数据库连接可用 ---
@@ -556,7 +549,7 @@ class LivingMemoryManual(Star):
             yield event.plain_result(
                 "用法: /lmput <JSON>\n"
                 "JSON 必须包含: text, topics, key_facts, sentiment\n"
-                "可选字段: memory_type, canonical_summary, persona_summary\n\n"
+                "可选字段: importance, memory_type\n\n"
                 "memory_type 可用值: GENERAL（默认）、PREFERENCE、PLAN 或自定义\n\n"
                 "示例:\n"
                 '/lmput <{"text": "Felis Abyssalis养了一只叫诺瓦（Noir）的赛博小猫", '
@@ -618,17 +611,10 @@ class LivingMemoryManual(Star):
         yield event.plain_result("正在插入记忆...")
 
         # --- 构建 metadata ---
-        # canonical_summary 对齐原版格式: text | fact1；fact2；...
-        if "canonical_summary" not in data:
-            canonical_parts = [memory_text]
-            if data["key_facts"]:
-                canonical_parts.append(
-                    "；".join(str(f) for f in data["key_facts"][:5])
-                )
-            auto_canonical = " | ".join(canonical_parts)
-        else:
-            auto_canonical = data["canonical_summary"]
-
+        # v1.2.0: 移除 canonical_summary 和 persona_summary。
+        # 经源码分析确认，livingmemory 的检索管线（BM25/向量）只索引 content 参数，
+        # 注入管线（format_memories_for_injection）只读 topics/key_facts/importance。
+        # canonical_summary 和 persona_summary 在整个流程中不被使用，属于冗余存储。
         memory_type = data.get("memory_type", DEFAULT_MEMORY_TYPE).upper()
 
         rich_metadata = {
@@ -637,10 +623,7 @@ class LivingMemoryManual(Star):
             "sentiment": data["sentiment"],
             "memory_type": memory_type,
             "interaction_type": "private_chat",
-            "canonical_summary": auto_canonical,
-            "persona_summary": data.get("persona_summary", memory_text),
-            "summary_schema_version": "v2",
-            "summary_quality": "normal",
+            "summary_schema_version": "v3",
         }
 
         # --- 获取 MemoryEngine 并写入 ---

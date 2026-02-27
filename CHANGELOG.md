@@ -2,6 +2,17 @@
 
 All notable changes to `livingmemory_manual` will be documented in this file.
 
+## [1.2.0] - 2026-02-27
+
+### Changed
+- **Removed redundant `canonical_summary` and `persona_summary` from metadata**: After a full source-code audit of `livingmemory`'s retrieval and injection pipeline, confirmed that these two fields are never used anywhere in the system:
+  - **Retrieval** (BM25 + Faiss vector): Only the `content` parameter passed to `add_memory()` is indexed. `canonical_summary` and `persona_summary` sit inertly inside the metadata JSON and are never searched against.
+  - **Injection** (`format_memories_for_injection`): Only reads `content`, `topics`, `key_facts`, `importance`, and `participants`. Neither `canonical_summary` nor `persona_summary` is accessed.
+  - In the auto-summarization path, `text` and `canonical_summary` were identical because `_build_storage_format()` sets `content = canonical_summary` before calling `add_memory()`. For `/lmput`, the redundancy was pure waste.
+- **Schema version bumped to `v3`**: Metadata written by this version no longer contains `canonical_summary`, `persona_summary`, or `summary_quality` fields.
+- **Simplified `/lmput` help text**: Removed mention of `canonical_summary` and `persona_summary` from usage instructions. Only five fields matter: `text`, `topics`, `key_facts`, `sentiment`, `importance`.
+- **Updated HTML Composer**: Removed the Persona Summary section from the `/lmput` tab. The LLM prompt template no longer requests `persona_summary` output.
+
 ## [1.1.0] - 2026-02-23
 
 ### Added
