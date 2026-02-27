@@ -374,7 +374,7 @@ class LivingMemoryManual(Star):
             "sentiment": analyzed.get("sentiment", "neutral"),
             "memory_type": memory_type,
             "interaction_type": "private_chat",
-            "summary_schema_version": "v3",
+            "summary_schema_version": "v2",
         }
 
         # --- 确保底层数据库连接可用 ---
@@ -623,7 +623,7 @@ class LivingMemoryManual(Star):
             "sentiment": data["sentiment"],
             "memory_type": memory_type,
             "interaction_type": "private_chat",
-            "summary_schema_version": "v3",
+            "summary_schema_version": "v2",
         }
 
         # --- 获取 MemoryEngine 并写入 ---
